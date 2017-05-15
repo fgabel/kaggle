@@ -1,0 +1,148 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn import model_selection, preprocessing
+import datetime
+#now = datetime.datetime.now()
+
+train = pd.read_csv('C:/Users/Frank/Desktop/Kaggle/Sberbank/train.csv')
+test = pd.read_csv('C:/Users/Frank/Desktop/Kaggle/Sberbank/test.csv')
+macro = pd.read_csv('C:/Users/Frank/Desktop/Kaggle/Sberbank/macro.csv')
+id_test = test.id
+train.sample(3)
+
+'''Check distribution of train cs test'''
+plt.subplot(211)
+plt.hist(train['full_sq'], bins=100, range=(0, 500))
+plt.subplot(212)
+plt.hist(test['full_sq'], bins=100, range=(0, 500))
+train.full_sq.mean()
+test.full_sq.mean()
+#drop = ["railroad_terminal_raion", "culture_objects_top_25_raion", "oil_chemistry_raion",         
+#"railroad_terminal_raion",      "nuclear_reactor_raion"     ,  
+#"build_count_foam"    ,         "big_road1_1line"      ,       
+#"railroad_1line"    ,           "office_sqm_500"       ,       
+#"trc_sqm_500"     ,             "cafe_count_500_price_4000"   ,
+#"cafe_count_500_price_high"  ,  "mosque_count_500"        ,    
+#"leisure_count_500"          ,  "office_sqm_1000"       ,      
+#"trc_sqm_1000"         ,        "cafe_count_1000_price_high"  ,
+#"mosque_count_1000"    ,        "cafe_count_1500_price_high"  ,
+#"mosque_count_1500"    ,        "cafe_count_2000_price_high"]
+
+y_train = train["price_doc"]
+x_train = train.drop(["id", "timestamp", "price_doc"], axis=1)
+x_test = test.drop(["id", "timestamp"], axis=1)
+
+#x_train = x_train.drop(drop, axis=1)
+#x_test = x_test.drop(drop, axis=1)
+
+x_train = x_train.assign(dummkopf = lambda x: (x['full_sq']==x['life_sq']))
+x_test = x_test.assign(dummkopf = lambda x: (x['full_sq']==x['life_sq']))
+#can't merge train with test because the kernel run for very long time
+'''Data cleaning'''
+#x_train.build_year[x_train.build_year == 20052009] = 2005
+#x_train.build_year[x_train.build_year < 200] = None
+
+# könnte informationen über vermieter enthalten....zB zu dum full und life sq zu trennen
+# x_train[x_train.full_sq <= x_train.life_sq]
+'''feature list with corresponding object type'''
+features=[]
+for c in train.columns:
+    features.append((train[c].dtype, c))
+'''construct one-hot-encoded matrix to feed into our NN'''    
+
+def convert_onehot(x_train_o, x_train):
+    for c in x_train_o.columns:
+        # categorical feature matrix
+        
+        if x_train_o[c].dtype != 'O':     
+            x_train_o = x_train_o.drop([c], axis = 1)
+        else:
+            x_train = x_train.drop([c], axis = 1)
+    for c in x_train_o.columns:
+        if x_train_o[c].dtype == 'object':
+            # onehotencoder needs integers as inputs, therefore run a labelencoder
+            lbl1 = preprocessing.LabelEncoder() 
+            lbl1.fit(list(x_train_o[c].values)) 
+            x_train_o[c] = lbl1.transform(list(x_train_o[c].values))
+    enc = preprocessing.OneHotEncoder()
+    enc.fit(x_train_o)
+    x_train_o = pd.DataFrame(enc.transform(x_train_o).toarray())
+    x_train_complete = pd.concat([x_train_o, x_train], axis = 1)
+    return x_train_complete
+'''# take a LabelEncoder from the preprocessing class
+# labelencoder().fit takes a list'''
+#for c in x_train.columns:
+#    if x_train[c].dtype == 'object':
+#        lbl = preprocessing.LabelEncoder() 
+#        lbl.fit(list(x_train[c].values)) 
+#        x_train[c] = lbl.transform(list(x_train[c].values))
+#        
+#        x_train.drop(c,axis=1,inplace=True)
+
+x_train_o = x_train    
+x_test_o = x_test
+
+x_train = convert_onehot(x_train_o, x_train) 
+x_test = convert_onehot(x_test_o, x_test) 
+    
+#for c in x_test.columns:
+#    if x_test[c].dtype == 'object':
+#        lbl = preprocessing.LabelEncoder()
+#        lbl.fit(list(x_test[c].values)) 
+#        x_test[c] = lbl.transform(list(x_test[c].values))
+#        #x_test.drop(c,axis=1,inplace=True)    
+
+
+x_train = np.array(x_train)
+y_train = np.array(y_train)
+
+x_train = np.delete(x_train, -1, 1)
+
+import tensorflow as tf
+
+x = tf.placeholder(tf.float32, [None, x_train.shape[1]])
+        
+W1 = tf.Variable(tf.zeros([x_train.shape[1], 100]))
+b1 = tf.Variable(tf.zeros([100]))
+
+W2 = tf.Variable(tf.zeros([100, 10]))
+b2 = tf.Variable(tf.zeros([10]))
+
+W3 = tf.Variable(tf.zeros([10, 1]))
+b3 = tf.Variable(tf.zeros([1]))
+
+var_list = [W1, b1, W2, b2, W3, b3]
+
+o1 = tf.matmul(x, W1) + b1
+i2 = tf.nn.relu(o1)
+o2 = tf.matmul(i2, W2) + b2
+i3 = tf.nn.relu(o2)
+y = tf.matmul(i3, W3) + b3
+        
+        
+y_ = tf.placeholder(tf.float32, [None,])
+        
+loss = tf.reduce_mean(tf.nn.l2_loss(y-y_))
+        
+optimizer = tf.train.GradientDescentOptimizer(10e-3).minimize(loss, var_list = var_list)        
+        
+        
+init = tf.global_variables_initializer()
+        
+sess = tf.Session()
+sess.run(init)        
+        
+for i in range(10):
+    batch_xs = x_train
+    batch_ys = y_train
+    sess.run(optimizer, feed_dict={x: batch_xs, y_: batch_ys})        
+        
+        
+
+y_predict = model.predict(dtest)
+output = pd.DataFrame({'id': id_test, 'price_doc': y_predict})
+output.head()
+
+output.to_csv('C:/Users/Frank/xgb.csv', index=False)
