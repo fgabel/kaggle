@@ -36,7 +36,7 @@ x_test = test.drop(["id", "timestamp"], axis=1)
 
 #x_train = x_train.drop(drop, axis=1)
 #x_test = x_test.drop(drop, axis=1)
-
+ 
 x_train = x_train.assign(dummkopf = lambda x: (x['full_sq']==x['life_sq']))
 x_test = x_test.assign(dummkopf = lambda x: (x['full_sq']==x['life_sq']))
 #can't merge train with test because the kernel run for very long time
